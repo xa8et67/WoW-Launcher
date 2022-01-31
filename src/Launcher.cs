@@ -134,6 +134,9 @@ class Launcher
                     // Refresh the client data before patching.
                     memory.RefreshMemoryData((int)gameAppData.Length);
 
+                    // We need to cache this here since we are using our RSA modulus as auth seed.
+                    var modulusOffset = memory.Data.FindPattern(Patterns.Common.SignatureModulus);
+
                     // Wait for all direct memory patch tasks to complete,
                     Task.WaitAll(new[]
                     {
@@ -148,29 +151,15 @@ class Launcher
 
                     NativeWindows.NtResumeProcess(processInfo.ProcessHandle);
 
-                    // Wait for client initialization.
-                    var initOffset = memory?.Read(mbi.BaseAddress, (int)mbi.RegionSize)?.FindPattern(Patterns.Windows.Init) ?? 0;
+                    WaitForUnpack(ref processInfo, memory, ref mbi);
 
-                    while (initOffset == 0)
-                    {
-                        initOffset = memory?.Read(mbi.BaseAddress, (int)mbi.RegionSize)?.FindPattern(Patterns.Windows.Init) ?? 0;
-
-                        Console.WriteLine("Waiting for client initialization...");
-                    }
-
-                    initOffset += BitConverter.ToUInt32(memory.Read(initOffset + memory.BaseAddress + 2, 4), 0) + 10;
-
-                    while (memory?.Read(initOffset + memory.BaseAddress, 1)?[0] == null ||
-                           memory?.Read(initOffset + memory.BaseAddress, 1)?[0] == 0)
-                        memory.Data = memory.Read(mbi.BaseAddress, (int)mbi.RegionSize);
-
-                    PrepareAntiCrash(memory, ref mbi, ref processInfo);
-
-                    memory.RefreshMemoryData((int)mbi.RegionSize);
+                    // Generates a patch for the auth seed so we don't have to update them on each build.
+                    var authSeedFunctionOffset = GenerateAuthSeedFunctionPatch(memory, modulusOffset);
 
 #if x64
                     Task.WaitAll(new[]
                     {
+                        memory.QueuePatch(authSeedFunctionOffset, Patches.Windows.AuthSeed, "CustomAuthSeedFunction"),
                         memory.QueuePatch(Patterns.Windows.CertBundle, Patches.Windows.CertBundle, "CertBundle"),
                         memory.QueuePatch(Patterns.Windows.CertCommonName, Patches.Windows.CertCommonName, "CertCommonName", 5)
                     }, Program.CancellationTokenSource.Token);
@@ -236,6 +225,49 @@ class Launcher
         }
 
         return false;
+    }
+
+    static long GenerateAuthSeedFunctionPatch(WinMemory memory, long modulusOffset)
+    {
+        var authSeedLoadOffset = memory.Data.FindPattern(Patterns.Windows.AuthSeed);
+
+        if (authSeedLoadOffset == 0)
+            throw new InvalidDataException("authSeedLoadOffset");
+
+        var leaStartOffset = authSeedLoadOffset + 9;
+        var leaValue = Unsafe.ReadUnaligned<int>(ref memory.Data[leaStartOffset + 3]);
+        var authSeedWrapperOffset = leaStartOffset + leaValue + 7;
+        var jmpValue = Unsafe.ReadUnaligned<uint>(ref memory.Data[authSeedWrapperOffset + 6]);
+        var authSeedFunctionOffset = authSeedWrapperOffset + 5 + jmpValue + 5;
+
+        // Write the modulus offset to our custom get seed functions.
+        // Resulting static auth seed is: 179D3DC3235629D07113A9B3867F97A7
+        Unsafe.WriteUnaligned(ref Patches.Windows.AuthSeed[3], (uint)(modulusOffset - authSeedWrapperOffset - 7));
+
+        return authSeedFunctionOffset;
+    }
+
+    static void WaitForUnpack(ref ProcessInformation processInfo, WinMemory memory, ref MemoryBasicInformation mbi)
+    {
+        // Wait for client initialization.
+        var initOffset = memory?.Read(mbi.BaseAddress, (int)mbi.RegionSize)?.FindPattern(Patterns.Windows.Init) ?? 0;
+
+        while (initOffset == 0)
+        {
+            initOffset = memory?.Read(mbi.BaseAddress, (int)mbi.RegionSize)?.FindPattern(Patterns.Windows.Init) ?? 0;
+
+            Console.WriteLine("Waiting for client initialization...");
+        }
+
+        initOffset += BitConverter.ToUInt32(memory.Read(initOffset + memory.BaseAddress + 2, 4), 0) + 10;
+
+        while (memory?.Read(initOffset + memory.BaseAddress, 1)?[0] == null ||
+               memory?.Read(initOffset + memory.BaseAddress, 1)?[0] == 0)
+            memory.Data = memory.Read(mbi.BaseAddress, (int)mbi.RegionSize);
+
+        PrepareAntiCrash(memory, ref mbi, ref processInfo);
+
+        memory.RefreshMemoryData((int)mbi.RegionSize);
     }
 
     static void PrepareAntiCrash(WinMemory memory, ref MemoryBasicInformation mbi, ref ProcessInformation processInfo)
