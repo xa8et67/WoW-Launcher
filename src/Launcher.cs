@@ -242,7 +242,7 @@ class Launcher
 
         // Write the modulus offset to our custom get seed functions.
         // Resulting static auth seed is: 179D3DC3235629D07113A9B3867F97A7
-        Unsafe.WriteUnaligned(ref Patches.Windows.AuthSeed[3], (uint)(modulusOffset - authSeedWrapperOffset - 7));
+        Unsafe.WriteUnaligned(ref Patches.Windows.AuthSeed[3], (uint)(modulusOffset - authSeedFunctionOffset - 7));
 
         return authSeedFunctionOffset;
     }
