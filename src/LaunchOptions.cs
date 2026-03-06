@@ -1,11 +1,10 @@
 ﻿// Copyright (c) Arctium.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
-using System.CommandLine;
 using System.CommandLine.Builder;
 using System.CommandLine.Parsing;
 
-namespace Arctium.WoW.Launcher.Misc;
+namespace Arctium.Game.Launcher;
 
 static class LaunchOptions
 {
@@ -13,6 +12,14 @@ static class LaunchOptions
     public static Option<string> GamePath = new("--path");
     public static Option<string> GameBinary = new("--binary");
     public static Option<bool> KeepCache = new("--keepcache", () => true);
+    public static Option<string> VersionUrl = new("--versionurl");
+    public static Option<string> CdnsUrl = new("--cdnsurl");
+    public static Option<string> ProductName = new("--product", () => "wow");
+    public static Option<string> CdnRegion = new("--region", () => "EU");
+    public static Option<string> BgsPortal = new("--portal");
+
+    // Game command line options.
+    public static Option<string> GameConfig = new("-config", () => "Config.wtf");
 
     public static Parser Instance => new CommandLineBuilder(ConfigureCommandLine(RootCommand))
         .UseHelp()
@@ -22,12 +29,18 @@ static class LaunchOptions
         .UseSuggestDirective()
         .Build();
 
-    public static RootCommand RootCommand = new("Arctium\0WoW\0Launcher")
+    public static RootCommand RootCommand = new("Arctium Game Launcher")
     {
         Version,
         GamePath,
         GameBinary,
-        KeepCache
+        KeepCache,
+        VersionUrl,
+        CdnsUrl,
+        ProductName,
+        CdnRegion,
+        BgsPortal,
+        GameConfig,
     };
 
     static Command ConfigureCommandLine(Command rootCommand)
@@ -38,4 +51,3 @@ static class LaunchOptions
         return rootCommand;
     }
 }
-

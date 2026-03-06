@@ -1,7 +1,7 @@
 ﻿// Copyright (c) Arctium.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
-namespace Arctium.WoW.Launcher.Structures;
+namespace Arctium.Game.Launcher.Structures;
 
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 struct ProcessBasicInformation
@@ -13,5 +13,5 @@ struct ProcessBasicInformation
     public nint UniqueProcessId;
     public nint InheritedFromUniqueProcessId;
 
-    public int Size => Marshal.SizeOf(typeof(ProcessBasicInformation));
+    public static int Size => Marshal.SizeOf<ProcessBasicInformation>();
 }
